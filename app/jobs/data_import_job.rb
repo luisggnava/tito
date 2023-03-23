@@ -11,6 +11,7 @@ class DataImportJob < ApplicationJob
     csv.each { |row| contacts << build_contact(row.to_h.with_indifferent_access, data_import.account) }
     result = Contact.import contacts, on_duplicate_key_update: :all, batch_size: 1000
     data_import.update!(status: :completed, processed_records: csv.length - result.failed_instances.length, total_records: csv.length)
+    save_invalid_records_csv(csv.headers)
   end
 
   private
@@ -20,14 +21,33 @@ class DataImportJob < ApplicationJob
     contact = init_contact(params, account)
 
     contact.name = params[:name] if params[:name].present?
-    contact.assign_attributes(custom_attributes: contact.custom_attributes.merge(params.except(:identifier, :email, :name)))
-    contact
+    contact.assign_attributes(custom_attributes: contact.custom_attributes.merge(params.except(:identifier, :email, :name, :phone_number)))
+    contact.valid? ? contact : invalid_record(contact)
   end
 
+  # add the phone number check here
   def get_identified_contacts(params, account)
     identifier_contact = account.contacts.find_by(identifier: params[:identifier]) if params[:identifier]
     email_contact = account.contacts.find_by(email: params[:email]) if params[:email]
     [identifier_contact, email_contact]
+  end
+
+  def invalid_records(contact)
+    @invalid_records << contact
+  end
+
+  def save_invalid_records_csv(_headers)
+    return if @invalid_records.blank?
+
+    attributes = %w[name email identifier phone_number ip_address errors]
+
+    CSV.generate(headers: true) do |csv|
+      csv << attributes
+
+      @invalid_records.each do |record|
+        csv << attributes.map { |attr| record.send(attr) } # add attributes hash manually
+      end
+    end
   end
 
   def init_contact(params, account)
