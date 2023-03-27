@@ -55,7 +55,7 @@ class ApplicationMailer < ActionMailer::Base
     {
       global_config: GlobalConfig.get('BRAND_NAME', 'BRAND_URL'),
       action_url: @action_url,
-      attachment_url: Rails.application.routes.url_helpers.rails_blob_url(@attachment)
+      attachment_url: @attachment_url
     }
   end
 
